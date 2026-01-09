@@ -16,6 +16,8 @@
 #include <QTimer>
 #include <QStatusBar>
 #include <QInputDialog>
+#include <QUdpSocket>
+#include <QNetworkDatagram>
 
 class ChatWindow : public QMainWindow {
     Q_OBJECT
@@ -47,9 +49,12 @@ private slots:
 
     void onAddMemberClicked();
 
+    void onDiscoveryResponse();
+
 private:
     void setupUI();
     void processServerMessage(QString message);
+    void startDiscovery();
 
     // --- UI Elements ---
     QLabel *currentUserLabel;
@@ -83,8 +88,8 @@ private:
 
     QPushButton *addMemberBtn;
 
-    // --- Network & Data ---
     QTcpSocket *socket;
+    QUdpSocket *udpSocket;
     QString currentUsername;
     QTimer *refreshTimer;
 

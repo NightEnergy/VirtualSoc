@@ -18,11 +18,42 @@ ChatWindow::ChatWindow(QWidget *parent) : QMainWindow(parent) {
     refreshTimer = new QTimer(this);
     connect(refreshTimer, &QTimer::timeout, this, &ChatWindow::sendRefreshRequests);
 
-    socket->connectToHost("127.0.0.1", 9000);
+    // socket->connectToHost("127.0.0.1", 9000);
+    startDiscovery();
 }
 
 ChatWindow::~ChatWindow() {
     if(socket->isOpen()) socket->close();
+}
+
+void ChatWindow::startDiscovery() {
+    currentUserLabel->setText("Searching for server...");
+    statusBar()->showMessage("Looking for server in local network...", 0);
+
+    udpSocket = new QUdpSocket(this);
+    udpSocket->bind(QHostAddress::Any, 0);
+    connect(udpSocket, &QUdpSocket::readyRead, this, &ChatWindow::onDiscoveryResponse);
+
+    QByteArray data = "WHO_IS_SERVER";
+    udpSocket->writeDatagram(data, QHostAddress::Broadcast, 9001);
+}
+
+void ChatWindow::onDiscoveryResponse() {
+    while (udpSocket->hasPendingDatagrams()) {
+        QNetworkDatagram datagram = udpSocket->receiveDatagram();
+
+        if (datagram.data().contains("SERVER_HERE")) {
+            QHostAddress serverIp = datagram.senderAddress();
+            statusBar()->showMessage("Found server at: " + serverIp.toString(), 2000);
+
+            socket->connectToHost(serverIp, 9000);
+
+            udpSocket->close();
+            udpSocket->deleteLater();
+            udpSocket = nullptr;
+            return;
+        }
+    }
 }
 
 void ChatWindow::setupUI() {

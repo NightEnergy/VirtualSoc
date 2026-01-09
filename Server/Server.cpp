@@ -26,15 +26,35 @@ Server::Server(int port) : port(port), dbManager("virtualsoc.db") {
         perror("listen"); exit(EXIT_FAILURE);
     }
 
+    udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_fd < 0) { perror("udp socket failed"); exit(EXIT_FAILURE); }
+
+    struct sockaddr_in udp_addr;
+    memset(&udp_addr, 0, sizeof(udp_addr));
+    udp_addr.sin_family = AF_INET;
+    udp_addr.sin_addr.s_addr = INADDR_ANY;
+    udp_addr.sin_port = htons(DISCOVERY_PORT);
+
+    if (bind(udp_fd, (const struct sockaddr *)&udp_addr, sizeof(udp_addr)) < 0) {
+        perror("udp bind failed"); exit(EXIT_FAILURE);
+    }
+
     epoll_fd = epoll_create1(0);
+
     struct epoll_event event;
     event.events = EPOLLIN;
     event.data.fd = server_fd;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event);
+
+    struct epoll_event ev_udp;
+    ev_udp.events = EPOLLIN;
+    ev_udp.data.fd = udp_fd;
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, udp_fd, &ev_udp);
 }
 
 Server::~Server() {
     close(server_fd);
+    close(udp_fd);
     close(epoll_fd);
 }
 
@@ -44,7 +64,7 @@ void Server::setNonBlocking(int sock) {
 }
 
 void Server::start() {
-    std::cout << "Listening on port: " << port << std::endl;
+    std::cout << "Listening on TCP port: " << port << " and UDP port: " << DISCOVERY_PORT << std::endl;
     struct epoll_event events[MAX_EVENTS];
 
     while (true) {
@@ -52,9 +72,27 @@ void Server::start() {
         for (int i = 0; i < num_events; i++) {
             if (events[i].data.fd == server_fd) {
                 handleNewConnection();
+            } else if (events[i].data.fd == udp_fd) {
+                handleDiscovery();
             } else {
                 handleClientActivity(events[i].data.fd);
             }
+        }
+    }
+}
+
+void Server::handleDiscovery() {
+    char buffer[1024] = {0};
+    struct sockaddr_in client_addr;
+    socklen_t len = sizeof(client_addr);
+
+    int n = recvfrom(udp_fd, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &len);
+    if (n > 0) {
+        std::string msg(buffer, n);
+        if (msg.find("WHO_IS_SERVER") != std::string::npos) {
+            std::string reply = "SERVER_HERE";
+            sendto(udp_fd, reply.c_str(), reply.length(), 0, (struct sockaddr *)&client_addr, len);
+            std::cout << "Discovery request from " << inet_ntoa(client_addr.sin_addr) << std::endl;
         }
     }
 }

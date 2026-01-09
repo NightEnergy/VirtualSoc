@@ -4,16 +4,19 @@
 #include <vector>
 #include <sys/epoll.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <string>
 #include "Client.h"
 #include "Database/Database.h"
 
 #define MAX_EVENTS 1024
 #define BUFFER_SIZE 32768
+#define DISCOVERY_PORT 9001
 
 class Server {
 private:
     int server_fd;
+    int udp_fd;
     int epoll_fd;
     int port;
     std::vector<Client> clients;
@@ -22,6 +25,7 @@ private:
     void setNonBlocking(int sock);
     void handleNewConnection();
     void handleClientActivity(int client_fd);
+    void handleDiscovery();
 
     DatabaseManager dbManager;
 
